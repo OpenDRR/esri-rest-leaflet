@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Leaflet Example</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css"
+      integrity="sha512-xodZBNTC5n17Xt2atTPuE1HxjVMSvLVW9ocqUKLsCC5CXdbqCmblAshOMAS6/keqq/sMZMZ19scR4PsZChSR7A=="
+      crossorigin="" />
+
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"
+      integrity="sha512-XQoYMqMTK8LvdxXYG3nZ448hOEQiglfqkJs1NOQV44cWnUrBc8PkAOcXy20w0vlaXaVUearIOBhiXZ5V3ynxwA=="
+      crossorigin=""></script>
+    <script src="https://code.jquery.com/jquery-1.12.2.min.js"
+      integrity="sha256-lZFHibXzMHo3GGeehn1hudTAP3Sc0uKXBXAzHX1sjtk=" crossorigin="anonymous"></script>
+
+    <!-- Load Esri Leaflet from CDN -->
+    <script src="https://unpkg.com/esri-leaflet@2.5.3/dist/esri-leaflet.js"
+      integrity="sha512-K0Vddb4QdnVOAuPJBHkgrua+/A9Moyv8AQEWi0xndQ+fqbRfAFd47z4A9u1AW/spLO0gEaiE1z98PK1gl5mC5Q=="
+      crossorigin=""></script>
+
+    <!-- Load Esri Leaflet Renderers plugin to use feature service symbology -->
+    <script src="https://unpkg.com/esri-leaflet-renderers@2.1.2" crossorigin=""></script>
+
+    <style>
+        .map {
+            width: 100%;
+            height: 500px; 
+        }
+
+        div.item .label, div.item .value {
+            color: #000;
+            font-size: 14px;
+            border: none;
+        }
+
+        .info {
+            padding: 6px 8px;
+            font: 14px/16px Arial, Helvetica, sans-serif;
+            background: white;
+            background: rgba(255,255,255,0.8);
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+            border-radius: 5px;
+        }
+
+        .info h4 {
+            margin: 0 0 5px;
+            color: #777;
+        }
+
+        #modal {
+            background-color: white;
+            animation-name: progress;
+            animation-duration: 2s;
+            animation-iteration-count: infinite;
+            height: 4px;
+            margin-top: -4px;
+        }
+
+        @keyframes progress {
+            0% {
+                background-color: white;
+            }
+            50% {
+                background-color:rgba(255, 0, 0, 0.500);
+            }
+            100% {
+                background-color: white;
+            }
+        }
+
+        .legend {
+            line-height: 18px;
+            color: #555;
+        }
+        
+        .legend i {
+            width: 18px;
+            height: 18px;
+            float: left;
+            margin-right: 8px;
+        }
+
+        .attr {
+            width: 25%;
+            float: left;
+        }
+
+        .prop {
+            font-weight: bold;
+            margin-right: 10px;
+        }
+
+        .prop::after {
+            content: ':';
+        }
+
+        .val {
+            float: right;
+            margin-right: 10px;
+        }
+
+        #sidebar {
+            overflow: auto;
+        }
+
+    </style>
+    </head>
+
+    <body>
+        <h1>Sample Leaflet Map with OpenDRR Esri REST Services</h1>
+        
+        <div id="map" class="map"></div>
+        
+        <div id="sidebar"></div>
+
+        <p></p>
+    </body>
+    
+    <script>
+
+      var map , filter, indicator, legend, tiles, renderer_field;
+
+      $( document ).ready( function() {
+
+        tiles = L.tileLayer('http://{s}.tile.osm.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors, Points &copy 2012 LINZ'
+        });
+
+        map = L.map( 'map', { layers: [tiles] } ).setView( [61.0666922, -107.991707], 3 );
+
+        legend = L.control( { position: 'bottomright' } );
+
+        filter = "pruid='11'";
+        restUrl = "https://maps-cartes.services.geo.ca/server_serveur/rest/services/NRCan/nhsl_en/MapServer/6";
+
+        // get the field used for classifying features
+        // NOTE: this is also available in the service 
+        // metadata so we may not need to request is explicitly
+        $.getJSON( restUrl + "?f=pjson", function( data ) {
+
+          var flds, fields;
+
+          renderer_field = data.drawingInfo.renderer.field;
+
+          if ( !renderer_field ) {
+
+            var flds = [],
+                dataFields = data.fields;
+            
+            for ( var i = 0; i < dataFields.length; i++ ) {
+              if ( dataFields[i]['name'].includes("SHAPE") ) {
+                continue;
+              }
+              flds.push( dataFields[i]['name'] );
+            }
+
+            fields = flds;
+
+          } else {
+            fields = ['OBJECTID', renderer_field]
+          }
+
+          var restLayer = L.esri.featureLayer({ 
+            url: restUrl,
+            fields: fields,
+            simplifyFactor: 0.25,
+            precision: 5,
+            where: filter,
+            renderer: L.canvas()
+          });
+
+          restLayer.on( 'loading', function( e ) {
+            $('#map').before('<div id="modal"></div>');
+          });
+
+          restLayer.on( 'load', function( e ) {
+            $( '#modal' ).remove();
+          });
+
+          restLayer.addTo( map );
+
+          restLayer.metadata( function ( error, metadata ) {
+            if ( error ) {
+              return;
+            }
+
+            var renderers = metadata.drawingInfo.renderer.classBreakInfos;
+
+            legend.onAdd = function ( map ) {
+
+              var div = L.DomUtil.create( 'div', 'info legend' );
+
+              if ( renderers.length === 0 ) { 
+                return L.DomUtil.create( 'div' ); 
+              }
+
+              div.innerHTML += '<center><strong>' + metadata.drawingInfo.renderer.field + '</strong></center>';
+
+              for ( var i = 0; i < renderers.length; i++ ) {
+                div.innerHTML +=
+                    '<i style="background:rgb(' + renderers[i]['symbol'].color[0] + ',' + renderers[i]['symbol'].color[1] + ',' + renderers[i]['symbol'].color[2] + ',' + renderers[i]['symbol'].color[3] + ');border-color:rgb(' + renderers[i]['symbol']['outline'].color[0] + ',' + renderers[i]['symbol']['outline'].color[1] + ',' + renderers[i]['symbol']['outline'].color[2]+ ',' + renderers[i]['symbol']['outline'].color[3] + ');border-width:' + renderers[i]['symbol']['outline'].width + 'px;"></i> ' +
+                    renderers[i]['label'] + '<br>';
+              }
+
+              return div;
+
+            };
+
+            legend.addTo( map );
+          });
+
+          var oldId;
+
+        //   restLayer.on('mouseout', function ( e ) {
+        //     restLayer.resetFeatureStyle( oldId );
+        //   });
+
+        //   restLayer.on('mouseover', function ( e ) {
+        //     oldId = e.layer.feature.id;
+        //     restLayer.setFeatureStyle( e.layer.feature.id, {
+        //       fillColor: 'red',
+        //       color: 'red',
+        //       weight: 3,
+        //       fillOpacity: 0.5
+        //     });
+        //   });
+
+          restLayer.on('click', function ( e ) {
+
+            restLayer.resetFeatureStyle( oldId );
+
+            oldId = e.layer.feature.id;
+
+            restLayer.setFeatureStyle(e.layer.feature.id, {
+              fillColor: 'red',
+              color: 'red',
+              weight: 3,
+              fillOpacity: 0.5
+            });
+
+            // zoom to selected feature
+            // var bounds = e.layer.getBounds();
+            // map.fitBounds(bounds);
+
+            restLayer.query()
+              .where("OBJECTID = " + e.layer.feature.id )
+              .run( function( error, featureCollection ) {
+
+                let props = featureCollection.features[0].properties,
+                    string = '';
+
+                for ( const key in props ) {
+
+                  let cls = key.split("_")[0].toLowerCase();
+
+                  string +=
+                    '<div class="attr"><span class="prop">' + key + '</span><span class="val">' + props[key] + '</span></div>';
+                }
+              
+                $( '#sidebar' ).html( '<h3>Selected feature properties</h3>' + string );
+
+              });
+                
+          });
+        
+        });
+       
+        // get the layer data
+        // NOTE: this is also available in the service 
+        // metadata so we may not need to request is explicitly
+        $.getJSON( restUrl + "/query?where=" + filter + "&returnExtentOnly=true&f=pjson", function( data ) {
+
+          var min = L.Projection.SphericalMercator.unproject( L.point( data.extent.xmin, data.extent.ymin ) ),
+              max = L.Projection.SphericalMercator.unproject( L.point( data.extent.xmax, data.extent.ymax ) );
+
+          var bnds = new L.LatLngBounds( max, min );
+
+          map.fitBounds( bnds );
+        });
+        
+      });
+
+    </script>
+
+</html>
+
+
