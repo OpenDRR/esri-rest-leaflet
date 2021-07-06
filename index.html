@@ -22,7 +22,12 @@
     <script src="https://unpkg.com/esri-leaflet-renderers@2.1.2" crossorigin=""></script>
 
     <style>
-        .map {
+
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+        }
+        
+        #map {
             width: 100%;
             height: 500px; 
         }
@@ -107,9 +112,9 @@
     </head>
 
     <body>
-        <h1>Sample Leaflet Map with OpenDRR Esri REST Services</h1>
+        <h1>Sample Leaflet Map with Esri REST Services</h1>
         
-        <div id="map" class="map"></div>
+        <div id="map"></div>
         
         <div id="sidebar"></div>
 
@@ -131,7 +136,8 @@
         legend = L.control( { position: 'bottomright' } );
 
         filter = "pruid='11'";
-        restUrl = "https://maps-cartes.services.geo.ca/server_serveur/rest/services/NRCan/nhsl_en/MapServer/6";
+        // restUrl = "https://maps-cartes.services.geo.ca/server_serveur/rest/services/NRCan/nhsl_en/MapServer/6";
+        restUrl = "https://maps-cartes.services.geo.ca/server_serveur/rest/services/NRCan/physical_exposure_en/MapServer/1";
 
         // get the field used for classifying features
         // NOTE: this is also available in the service 
@@ -184,7 +190,7 @@
               return;
             }
 
-            var renderers = metadata.drawingInfo.renderer.classBreakInfos;
+            var renderers = metadata.drawingInfo.renderer.classBreakInfos ? metadata.drawingInfo.renderer.classBreakInfos : metadata.drawingInfo.renderer.uniqueValueInfos;
 
             legend.onAdd = function ( map ) {
 
@@ -194,12 +200,12 @@
                 return L.DomUtil.create( 'div' ); 
               }
 
-              div.innerHTML += '<center><strong>' + metadata.drawingInfo.renderer.field + '</strong></center>';
+              div.innerHTML += '<center><strong>' + metadata.name + '</strong></center>';
 
               for ( var i = 0; i < renderers.length; i++ ) {
                 div.innerHTML +=
-                    '<i style="background:rgb(' + renderers[i]['symbol'].color[0] + ',' + renderers[i]['symbol'].color[1] + ',' + renderers[i]['symbol'].color[2] + ',' + renderers[i]['symbol'].color[3] + ');border-color:rgb(' + renderers[i]['symbol']['outline'].color[0] + ',' + renderers[i]['symbol']['outline'].color[1] + ',' + renderers[i]['symbol']['outline'].color[2]+ ',' + renderers[i]['symbol']['outline'].color[3] + ');border-width:' + renderers[i]['symbol']['outline'].width + 'px;"></i> ' +
-                    renderers[i]['label'] + '<br>';
+                    '<div style="white-space: nowrap;margin-top: 2px;"><i style="background:rgb(' + renderers[i]['symbol'].color[0] + ',' + renderers[i]['symbol'].color[1] + ',' + renderers[i]['symbol'].color[2] + ',' + renderers[i]['symbol'].color[3] + ');border-color:rgb(' + renderers[i]['symbol']['outline'].color[0] + ',' + renderers[i]['symbol']['outline'].color[1] + ',' + renderers[i]['symbol']['outline'].color[2]+ ',' + renderers[i]['symbol']['outline'].color[3] + ');border-width:' + renderers[i]['symbol']['outline'].width + 'px;"></i> ' +
+                    renderers[i]['label'] + '</div>';
               }
 
               return div;
@@ -240,18 +246,16 @@
 
             // zoom to selected feature
             // var bounds = e.layer.getBounds();
-            // map.fitBounds(bounds);
+            // map.fitBounds( bounds );
 
             restLayer.query()
               .where("OBJECTID = " + e.layer.feature.id )
-              .run( function( error, featureCollection ) {
+              .run( function( error, resp ) {
 
-                let props = featureCollection.features[0].properties,
+                let props = resp.features[0].properties,
                     string = '';
 
                 for ( const key in props ) {
-
-                  let cls = key.split("_")[0].toLowerCase();
 
                   string +=
                     '<div class="attr"><span class="prop">' + key + '</span><span class="val">' + props[key] + '</span></div>';
